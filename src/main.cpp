@@ -19,6 +19,7 @@ namespace {
   const tflite::Model* model = nullptr;
   tflite::MicroInterpreter* interpreter = nullptr;
   TfLiteTensor* input = nullptr;
+  TfLiteTensor* output_tensor = nullptr;
 }
 
 #define INPUT_BUFFER_SIZE 32
@@ -46,17 +47,11 @@ void setup() {
   
   Serial.begin(115200);
        // Wait for the serial connection to be established (for some boards)
-  
+  //while(!Serial);
   Serial.println("Starting setup...");
   Serial.print("Memory after Serial.begin: ");
   Serial.println(freeMemory());
-  uint8_t* test_buffer = (uint8_t*)malloc(199000); // Test allocation
-  if (test_buffer) {
-    Serial.println("Memory allocation successful!");
-    free(test_buffer);
-  } else {
-    Serial.println("Memory allocation failed!");
-  }
+  
   // Set up logging
   static tflite::MicroErrorReporter micro_error_reporter;
   error_reporter = &micro_error_reporter;
@@ -113,17 +108,11 @@ void setup() {
   
   Serial.print("Available memory after AllocateTensors: ");
   Serial.println(freeMemory());
-  
   input = interpreter->input(0);
-  Serial.println("test7");
-
-  // Verify the input tensor shape, it should match the model's expected shape
-  Serial.print("Input tensor shape: ");
-  for (int i = 0; i < input->dims->size; i++) {
-    Serial.print(input->dims->data[i]);
-    Serial.print(" ");
-  }
-  Serial.println("test 8");
+  output_tensor = interpreter->output(0);
+  // Example: Fill the tensor with default input data (if needed)
+  // You can also perform any checks or print tensor details at this stage
+  Serial.println("Input tensor initialized in setup()");
 }
 void loop() {
   unsigned long t0, t1, t2=0;
@@ -162,20 +151,20 @@ void loop() {
         for (int i = 0; i < array_length; i++) {
           input_array[i] = input_array[i] ;  // Example scaling
         }
-        TfLiteTensor* input_tensor = interpreter->input(0);
-        Serial.println("Ltest2");
+        Serial.println("Ltest1");
+        
         // Handle input tensor type accordingly
-        if (input_tensor->type == kTfLiteInt8) {
+        if (input->type == kTfLiteInt8) {
           Serial.println("Input tensor type: INT8");
 
           // Proper scaling of float input data to fit in the INT8 range [-128, 127]
           for (int i = 0; i < 7; i++) {
             int8_t quantized_value = (int8_t)((input_array[i] - 0.0f) * (255.0f / 6.0f) - 128.0f);  // Scale to [-128, 127]
-            input_tensor->data.int8[i] = quantized_value;
+            input->data.int8[i] = quantized_value;
           }
         }
         // Get the output tensor from the interpreter
-        TfLiteTensor* output_tensor = interpreter->output(0);
+        
         if (output_tensor->type == kTfLiteInt8) {
           int8_t output_value = output_tensor->data.int8[0];  // Access the output value (int8)
           output_value = output_value / 32.0f; // or another scale factor based on training
