@@ -6,41 +6,67 @@
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/lite/version.h"
+extern "C" {
+  #include <malloc.h>
+}
+
+int freeMemory() {
+  struct mallinfo mi = mallinfo();
+  return mi.fordblks;
+}
 namespace {
   tflite::ErrorReporter* error_reporter = nullptr;
   const tflite::Model* model = nullptr;
   tflite::MicroInterpreter* interpreter = nullptr;
   TfLiteTensor* input = nullptr;
-  constexpr int kTensorArenaSize = 200 * 1024;
-  static uint8_t tensor_arena[kTensorArenaSize];
 }
-#define INPUT_BUFFER_SIZE 64
-#define OUTPUT_BUFFER_SIZE 64
+
+#define INPUT_BUFFER_SIZE 32
+#define OUTPUT_BUFFER_SIZE 32
 #define INT_ARRAY_SIZE 8
 
-// put function declarations here:
 int string_to_array(char *in_str, int *int_array);
 void print_int_array(int *int_array, int array_len);
 
+char received_char = (char)NULL;
+int chars_avail = 0;
+char out_str_buff[OUTPUT_BUFFER_SIZE];
+char in_str_buff[INPUT_BUFFER_SIZE];
+int input_array[INT_ARRAY_SIZE];
 
-
-char received_char = (char)NULL;              
-int chars_avail = 0;                    // input present on terminal
-char out_str_buff[OUTPUT_BUFFER_SIZE];  // strings to print to terminal
-char in_str_buff[INPUT_BUFFER_SIZE];    // stores input from terminal
-int input_array[INT_ARRAY_SIZE];        // array of integers input by user
-
-int in_buff_idx=0; // tracks current input location in input buffer
+int in_buff_idx=0;
 int array_length=0;
 int array_sum=0;
 
 void setup() {
+  
+  constexpr int kTensorArenaSize = 50 * 1024;  // Reduced size to 50KB
+  
+  static uint8_t tensor_arena[kTensorArenaSize];  // Static allocation instead of malloc
+  
   Serial.begin(115200);
+       // Wait for the serial connection to be established (for some boards)
   
-  
+  Serial.println("Starting setup...");
+  Serial.print("Memory after Serial.begin: ");
+  Serial.println(freeMemory());
+  uint8_t* test_buffer = (uint8_t*)malloc(199000); // Test allocation
+  if (test_buffer) {
+    Serial.println("Memory allocation successful!");
+    free(test_buffer);
+  } else {
+    Serial.println("Memory allocation failed!");
+  }
   // Set up logging
   static tflite::MicroErrorReporter micro_error_reporter;
   error_reporter = &micro_error_reporter;
+  
+  Serial.println("test1");
+
+  // Static memory for tensor arena is already allocated above.
+  
+  Serial.print("Memory after tensor arena allocation: ");
+  Serial.println(freeMemory());
 
   // Map the model into a usable data structure
   model = tflite::GetModel(model_quantized_tflite);
@@ -48,6 +74,8 @@ void setup() {
     TF_LITE_REPORT_ERROR(error_reporter, "Failed to load the model.");
     return;
   }
+  
+  Serial.println("test2");
 
   if (model->version() != TFLITE_SCHEMA_VERSION) {
     TF_LITE_REPORT_ERROR(error_reporter,
@@ -56,24 +84,38 @@ void setup() {
     return;
   }
 
-  static tflite::MicroMutableOpResolver<5> micro_op_resolver;
+  Serial.println("test3");
+
+  static tflite::MicroMutableOpResolver<6> micro_op_resolver;
+  micro_op_resolver.AddFullyConnected();
   micro_op_resolver.AddAveragePool2D();
   micro_op_resolver.AddConv2D();
   micro_op_resolver.AddDepthwiseConv2D();
   micro_op_resolver.AddReshape();
   micro_op_resolver.AddSoftmax();
+  
+  Serial.println("test4");
 
-  static tflite::MicroInterpreter static_interpreter(
+  static tflite::MicroInterpreter* interpreter = new tflite::MicroInterpreter(
     model, micro_op_resolver, tensor_arena, kTensorArenaSize, error_reporter);
-  interpreter = &static_interpreter;
 
+  Serial.println("test5");
+  Serial.print("Available memory before AllocateTensors: ");
+  Serial.println(freeMemory());
+  
   TfLiteStatus allocate_status = interpreter->AllocateTensors();
+  Serial.println("test6");
   if (allocate_status != kTfLiteOk) {
-    TF_LITE_REPORT_ERROR(error_reporter, "AllocateTensors() failed. Error code: %d", allocate_status);
+    Serial.print("AllocateTensors() failed with status: ");
+    Serial.println(allocate_status);
     return;
   }
-
+  
+  Serial.print("Available memory after AllocateTensors: ");
+  Serial.println(freeMemory());
+  
   input = interpreter->input(0);
+  Serial.println("test7");
 
   // Verify the input tensor shape, it should match the model's expected shape
   Serial.print("Input tensor shape: ");
@@ -81,11 +123,10 @@ void setup() {
     Serial.print(input->dims->data[i]);
     Serial.print(" ");
   }
-  Serial.println();
-  
+  Serial.println("test 8");
 }
 void loop() {
-  unsigned long t0, t1, t2;
+  unsigned long t0, t1, t2=0;
   chars_avail = Serial.available(); 
   if (chars_avail > 0) {
     received_char = Serial.read();  // get the typed character and 
@@ -119,10 +160,10 @@ void loop() {
         }
         Serial.println();
         for (int i = 0; i < array_length; i++) {
-          input_array[i] = input_array[i] / 100.0f;  // Example scaling
+          input_array[i] = input_array[i] ;  // Example scaling
         }
         TfLiteTensor* input_tensor = interpreter->input(0);
-
+        Serial.println("Ltest2");
         // Handle input tensor type accordingly
         if (input_tensor->type == kTfLiteInt8) {
           Serial.println("Input tensor type: INT8");
