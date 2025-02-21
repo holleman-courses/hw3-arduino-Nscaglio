@@ -20,6 +20,7 @@ namespace {
   tflite::MicroInterpreter* interpreter = nullptr;
   TfLiteTensor* input = nullptr;
   TfLiteTensor* output_tensor = nullptr;
+  TfLiteStatus status ;
 }
 
 #define INPUT_BUFFER_SIZE 32
@@ -91,7 +92,7 @@ void setup() {
   
   Serial.println("test4");
 
-  static tflite::MicroInterpreter* interpreter = new tflite::MicroInterpreter(
+  interpreter = new tflite::MicroInterpreter(
     model, micro_op_resolver, tensor_arena, kTensorArenaSize, error_reporter);
 
   Serial.println("test5");
@@ -113,6 +114,12 @@ void setup() {
   // Example: Fill the tensor with default input data (if needed)
   // You can also perform any checks or print tensor details at this stage
   Serial.println("Input tensor initialized in setup()");
+  status = interpreter->Invoke();
+  if (status != kTfLiteOk) {
+    Serial.println("Inference failed!");
+} else {
+    Serial.println("Inference successful!");
+}
 }
 void loop() {
   unsigned long t0, t1, t2=0;
@@ -151,25 +158,29 @@ void loop() {
         for (int i = 0; i < array_length; i++) {
           input_array[i] = input_array[i] ;  // Example scaling
         }
-        Serial.println("Ltest1");
+        
         
         // Handle input tensor type accordingly
         if (input->type == kTfLiteInt8) {
-          Serial.println("Input tensor type: INT8");
-
           // Proper scaling of float input data to fit in the INT8 range [-128, 127]
           for (int i = 0; i < 7; i++) {
             int8_t quantized_value = (int8_t)((input_array[i] - 0.0f) * (255.0f / 6.0f) - 128.0f);  // Scale to [-128, 127]
             input->data.int8[i] = quantized_value;
           }
         }
+        Serial.println("Ltest1");
+        interpreter->Invoke();  // Run the model
+        Serial.println("Ltest2");
         // Get the output tensor from the interpreter
-        
         if (output_tensor->type == kTfLiteInt8) {
           int8_t output_value = output_tensor->data.int8[0];  // Access the output value (int8)
-          Serial.print("Prediction result (int8): ");
-          Serial.println(output_value);
           t2 = micros();  // Time after inference
+          Serial.print("Raw Prediction result (int8): ");
+          Serial.println(output_value);
+          float dequantized_value = (output_value + 128.0f) * (6.0f / 255.0f); 
+          Serial.print("Dequantized output value: ");
+          Serial.println(dequantized_value, 4);
+
         }
         unsigned long t_print = t1 - t0;
         unsigned long t_infer = t2 - t1;
