@@ -167,7 +167,6 @@ void loop() {
         
         if (output_tensor->type == kTfLiteInt8) {
           int8_t output_value = output_tensor->data.int8[0];  // Access the output value (int8)
-          output_value = output_value / 32.0f; // or another scale factor based on training
           Serial.print("Prediction result (int8): ");
           Serial.println(output_value);
           t2 = micros();  // Time after inference
